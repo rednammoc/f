@@ -14,8 +14,8 @@ f () {
     # Initialize directories
     local _F_CONFIG_DIR=$(dirname "${_F_CONFIG}")
     ! [ -d "${_F_CONFIG_DIR}" ] && mkdir -p "${_F_CONFIG_DIR}"
-    local _F_TAGS_DIR="${_F_CONFIG_DIR}/tags"
-    ! [ -d "${_F_TAGS_DIR}" ] && mkdir -p "${_F_TAGS_DIR}"
+    local _F_CMD_DIR="${_F_CONFIG_DIR}/cmd"
+    ! [ -d "${_F_CMD_DIR}" ] && mkdir -p "${_F_CMD_DIR}"
     ! [ -f "${_F_CONFIG}" ] && 
         echo "_F_LIST=\"${_F_CONFIG_DIR}/f.list\"" >> "${_F_CONFIG}"
 
@@ -98,9 +98,9 @@ f () {
             records=$(wc -l < "${_F_LIST}")
         fi
         echo "(Profile: $(basename "${_F_LIST}"), Records: ${records})"
-    elif ( [ "$1" == "clear" ] || [ "$1" == "-c" ] ) ; then
+    elif ( [ "$1 $2" == "unselect all" ] || [ "$1" == "-ua" ] ) ; then
         > "${_F_LIST}"
-    elif ( [ "$1" == "add" ] || [ "$1" == "-a" ] ) ; then
+    elif ( [ "$1" == "select" ] || [ "$1" == "-s" ] ) ; then
         local file="${2}" ; local index=0
         if   [ -z "${file}" ] ; then echo "Illegal argument." >&2; return 1; fi
         if ! [ -f "${file}" ] ; then echo "File does not exist." >&2; return 1; fi
@@ -117,21 +117,21 @@ f () {
         echo "${file}" >> "${_F_LIST}"	
         index=$(wc -l < "${_F_LIST}") 
         print_entry "${index}" "${file}"
-    elif ( [ "$1" == "delete" ] || [ "$1" == "-d" ] ) ; then
+    elif ( [ "$1" == "unselect" ] || [ "$1" == "-u" ] ) ; then
         local index="$2" ; local file=$(get_entry "${index}")
         [ -z "${file}" ] && return 1
         print_entry "${index}" "${file}"
         sed -e "${index}d" "${_F_LIST}" > "${_F_LIST}.tmp" && 
             mv "${_F_LIST}.tmp"  "${_F_LIST}"
     else
-        local tag="$1"; shift 2;  
-        local does_tag_exist=$(ls -1 "${_F_TAGS_DIR}" | grep "^${tag}$")
-        if ( [ -z "${tag}" ] || [ -z "${does_tag_exist}" ] ) ; then
+        local cmd="$1"; shift 2;  
+        local does_cmd_exist=$(ls -1 "${_F_CMD_DIR}" | grep "^${cmd}$")
+        if ( [ -z "${cmd}" ] || [ -z "${does_cmd_exist}" ] ) ; then
             echo "Usage: f [-adl] [args]"
             return 1
         fi
         local file_list=$(generate_file_list $@)
-        ${_F_TAGS_DIR}/${tag} ${file_list}
+        ${_F_CMD_DIR}/${tag} ${file_list}
     fi
 }
 f $@
