@@ -9,10 +9,20 @@ Usage:
 Options:
 
     select <file>       select a file.      
-    unselect <index>    unselect nth file.
-    unselect all        unselect all files.
+    unselect <pattern>  unselect file matching pattern.
     list                show selected files.
-    <cmd> <index>       operate on the nth selected file.
+    get <pattern>       get file matching pattern.
+    <cmd> <pattern>     operate on files matching pattern with custom command.
+
+Patterns:
+
+    <pattern>  = <sequence> || <range> || 'all'
+    <sequence> = <index-1> <index-2> ... <index-n>
+    <range>    = <index-start>:<index-end>           
+
+Custom Commands:
+
+You can trigger custom commands, by placing them into ~/.config/f/cmd/.
 
 Examples:
 
