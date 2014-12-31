@@ -1,4 +1,4 @@
-f - A file-operation toolkit
+f - A file-operation tool
 =
 
 Select files and operate on them.

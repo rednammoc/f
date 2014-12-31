@@ -1,9 +1,10 @@
 #!/bin/bash
-# @name: f.sh
-# @version: 0.54
+# @name:        f.sh
+# @version:     0.69
 # @description: file-operation toolkit.
-# @author: rednammoc
-# @date: 26/07/22
+# @author:      rednammoc
+# @date:        14/12/31
+# @todo:        unselect/exec by name does not work when its not in the current folder.
 
 # INSTALL: mv to /usr/bin/f or add f-location into PATH.
 
