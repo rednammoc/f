@@ -11,19 +11,19 @@
 _F_CONFIG="${HOME}/.config/f/f.conf"
 
 f () {
-  # Initialize directories.
+  # Setup and/or load configuration.
   local _F_CONFIG_DIR=$(dirname "${_F_CONFIG}")
   ! [ -d "${_F_CONFIG_DIR}" ] && mkdir -p "${_F_CONFIG_DIR}"
-  local _F_CMD_DIR="${_F_CONFIG_DIR}/cmd"
-  ! [ -d "${_F_CMD_DIR}" ] && mkdir -p "${_F_CMD_DIR}"
-  ! [ -f "${_F_CONFIG}" ] &&
-  echo "_F_LIST=\"${_F_CONFIG_DIR}/f.list\"" >> "${_F_CONFIG}"
+  if ! [ -f "${_F_CONFIG}" ] ; then
+    echo "_F_LIST=\"${_F_CONFIG_DIR}/f.list\""  >> "${_F_CONFIG}"
+    echo "_F_DRY=\"false\""                     >> "${_F_CONFIG}"
+  fi
   source "${_F_CONFIG}"
 
-  # Initialize variables.
+  # Initialize local variables.
   local _CMD=""		          # cmd executed by the user. when empty no cmd is executed.
   local _TARGET="${PWD}/"	  # target used as second parameter in cmd-string. default = current directory.
-  local _SELECTED_FILES=""	# contains selected files by the get-command.
+  local _SELECTED_FILES=()	# contains selected files by the get-command.
 
   # Check that index is 1 <= x <= size(list)
   is_index_within_list () {
@@ -31,8 +31,18 @@ f () {
     is_numeric "${index}" && [ "${index}" -le ${line_count} ]
   }
 
+  # Check that input is numeric.
   is_numeric () {
     [[ "${1}" =~ ^[1-9][0-9]*$ ]]
+  }
+
+  # Resolve relative paths.
+  resolve_path () {
+    local file=${1}
+    if ! [[ "${file}" = /* ]] ; then
+      file="`pwd`/${file}"
+    fi
+    echo ${file}
   }
 
   # Return list-entry at specified position
@@ -47,14 +57,16 @@ f () {
   # Select files from list.
   #
   # Arguments:
+  #  <file>     = <absolute-filepath> || <relative-filepath>
+  #  <files>    = <file>,<file>, ... <file>
   #  <pattern>  = <sequence> || <range> || 'all'
   #  <index>    = [1-9][0-9]
   #  <sequence> = <index>,<index>, ... <index>
-  #  <range>    = <index-start>:<index-end>
+  #  <range>    = <index>:<index>
   #
   get_files_from_list () {
-    if [ "${#}" -eq 1 ] ; then
-      local ARG="${1}"
+    while [ "$#" -gt 0 ] ; do
+      local ARG="${1}" ; shift 1
       if is_numeric "${ARG}" ; then # <index>
         local index="${ARG}"
         if ! is_index_within_list "${index}" ; then
@@ -63,12 +75,20 @@ f () {
         print_entry_by_index "${index}" || return 1
       elif [[ "${ARG}" == *,* ]] ; then # <sequence>
         IFS=',' read -ra SEQUENCE <<< "$ARG"
-        for index in "${SEQUENCE[@]}"; do
-          if is_numeric "${index}" ; then
+        for value in "${SEQUENCE[@]}"; do
+          if is_numeric "${value}" ; then
+            local index="${value}"
             if ! is_index_within_list "${index}" ; then
               echo "Illegal argument. Index out of range." >&2 && return 1
             fi
-            print_entry_by_index "${index}" || return 1
+            print_entry_by_index "${index}"
+          else
+            local entry=$(print_entry_by_name "${value}")
+            if [ -n "${entry}" ] ; then
+              echo $entry
+            else
+              echo "Illegal argument. Illegal sequence-pattern." >&2 && return 1
+            fi
           fi
         done
       elif [[ "${ARG}" == 'all' ]] ; then # 'all'
@@ -85,10 +105,21 @@ f () {
         fi
         get_files_from_list $(seq "${RANGE[0]}" "${RANGE[1]}") || return 1
       else
-        echo "Illegal argument. No pattern, sequence or range was specified." >&2
-        return 1
+        if [ -f "${ARG}" ] ; then
+          local file=$(resolve_path "${ARG}")
+          local entry=$(print_entry_by_name "${file}");
+          if [ -n "${entry}" ] ; then
+            echo ${entry}
+          else
+            echo "Illegal argument. Pattern didn't match any file." >&2
+            return 1
+          fi
+        else
+          echo "Illegal argument. No file, pattern, sequence or range was specified." >&2
+          return 1
+        fi
       fi
-    fi
+    done
   }
 
   print_selected_files_from_list () {
@@ -100,61 +131,89 @@ f () {
     [ -n "${file}" ] && print_entry "${index}" "${file}"
   }
 
+  print_entry_by_name () {
+    local file="${1}"
+    if [ -f "${_F_LIST}" ] ; then
+      if grep -Fxq "${file}" "${_F_LIST}" ; then
+        index=`grep -Fxnm 1 "${file}" "${_F_LIST}" | grep -oEi '^[0-9]+'`
+        print_entry "${index}" "${file}"
+      fi
+    fi
+  }
+
   print_entry () {
     local index="$1"; local path="$2"
     printf "%+6s  ${path}\n" "${index}"
   }
 
-  # Parse/Execute commandline-arguments
-  while [ "$#" -gt 0 ] ; do
-    if [ "$1" == "list" ] || [ "$1" == "-l" ] ; then
-      local records=0; local line_count=$(wc -l < "${_F_LIST}")
-      if [ -f "${_F_LIST}" ] && [[ "${line_count}" -gt 0 ]] ; then
-        cat -n "${_F_LIST}" ;
-      fi
-      return $?
-    elif ( [ "$1" == "clear" ] || [ "$1" == "-c" ] ) ; then
-      > "${_F_LIST}" ;
-      return $?
-    elif ( [ "$1" == "select" ] || [ "$1" == "-s" ] ) ; then
-      local file="${2}" ; local index=0
+  print_usage () {
+    echo "Usage: f [-adl] [args]"
+  }
+
+  f_list () {
+    local records=0; local line_count=$(wc -l < "${_F_LIST}")
+    if [ -f "${_F_LIST}" ] && [[ "${line_count}" -gt 0 ]] ; then
+      cat -n "${_F_LIST}" ;
+    fi
+  }
+
+  f_select () {
+    while [ "$#" -gt 0 ] ; do
+      local file="${1}" ; local index=0 ; shift 1
       if   [ -z "${file}" ] ; then
         echo "Illegal argument." >&2 && return 1;
       fi
       if ! [ -f "${file}" ] ; then
         echo "File does not exist." >&2 && return 1;
       fi
-      # Resolve relative path
-      if ! [[ "${file}" = /* ]] ; then
-        file="`pwd`/${file}"
+      local file=$(resolve_path "${file}")
+      local duplicate=$(print_entry_by_name ${file})
+      if [ -n "${duplicate}" ] ; then
+        index=$(echo $duplicate | gawk -F " " '{print $1}')
+        echo "The file '${file}' is already selected (#${index})." >&2
+        return 1
       fi
-
-      # Check for duplicate entries
-      if [ -f "${_F_LIST}" ] ; then
-        if grep -Fxq "${file}" "${_F_LIST}" ; then
-          index=`grep -Fxnm 1 "${file}" "${_F_LIST}" | grep -oEi '^[0-9]+'`
-          echo "The file '${file}' is already selected (#${index})." >&2
-          return 1
-        fi
-      fi
+      # Add file to selection and print result.
       echo "${file}" >> "${_F_LIST}"
       index=$(wc -l < "${_F_LIST}")
       print_entry "${index}" "${file}"
-      return $?
-    elif ( [ "$1" == "unselect" ] || [ "$1" == "-u" ] ) ; then
-      shift 1; local selected_files=$(print_selected_files_from_list $1)
-      while read -r index file ; do
-        sed -e "${index}d" "${_F_LIST}" > "${_F_LIST}.tmp" &&
-        mv "${_F_LIST}.tmp"  "${_F_LIST}" &&
-        print_entry "${index}" "${file}"
-      done <<< "${selected_files}"
-      return $?
-    elif ( [ "$1" == "get" ] || [ "$1" == "-g" ] ) ; then
-      # Temporary store selected files.
-      shift 1 ; _SELECTED_FILES=$(print_selected_files_from_list $1) ; shift 1 ;
-    elif [ "$1" == "-exec" ] ; then
-      shift 1 ; local cmd="" ;
-      local cmd_terminated=false ; local cmd_params=0 ;
+    done
+  }
+
+  f_unselect () {
+    shift 1; local selected_files=$(print_selected_files_from_list $@)
+    while read -r index file ; do
+      sed -e "${index}d" "${_F_LIST}" > "${_F_LIST}.tmp" &&
+      mv "${_F_LIST}.tmp"  "${_F_LIST}" &&
+      print_entry "${index}" "${file}"
+    done <<< "${selected_files}"
+  }
+
+  # When no commands were specified print usage.
+  if [ "$#" -eq 0 ] ; then
+    print_usage && return 1
+  fi
+
+  # Parse/Execute commandline-arguments.
+  #  These commands cannot be combined with other commands.
+  if [ "$1" == "list" ] || [ "$1" == "-l" ] ; then
+    f_list                  ; return $?
+  elif ( [ "$1" == "clear" ] || [ "$1" == "-c" ] ) ; then
+    > "${_F_LIST}"          ; return $?
+  elif ( [ "$1" == "select" ] || [ "$1" == "-s" ] ) ; then
+    shift 1 ; f_select $@   ; return $?
+  elif ( [ "$1" == "unselect" ] || [ "$1" == "-u" ] ) ; then
+    shift 1 ; f_unselect $@ ; return $?
+  fi
+
+  # Parse/Execute commandline-arguments.
+  #  These commands must be combined.
+  while [ "$#" -gt 0 ] ; do
+    if [ "$1" == "exec" ] || [ "$1" == "-e" ] ; then
+      shift 1 ;
+      local cmd="" ;
+      local cmd_terminated=false ;
+      local cmd_params=0 ;
 
       # Fetch -exec <cmd> until termination-symbol '\;'.
       while [ "$#" -gt 0 ] ; do
@@ -179,11 +238,11 @@ f () {
       # Temporary store command-string.
       _CMD=${cmd}
     else
-      local target="$1"; shift 1;
-      if ( [ -z "${target}" ] || ! [ -d "${target}" ] ) ; then
-        echo "Usage: f [-adl] [args]" && return 1
-      fi
-      _TARGET=${target}
+      # Temporary store selected files.
+      entry=$(print_selected_files_from_list $1)
+      if [ -z "${entry}" ] ; then return 1; fi
+      _SELECTED_FILES+=("${entry}") ;
+      shift 1
     fi
   done
 
@@ -197,15 +256,13 @@ f () {
 
   echo ${_SELECTED_FILES[@]} | while read line; do
     local file=$(echo ${line} | gawk -F " " '{print $2}')  # parse the filename.
-    echo LINE $line CMD $_CMD FILE $file
     local cmd=$(echo ${_CMD})
     local cmd=$(echo ${cmd} | sed -e "s#{}#${file}#")	  	# replace first {} with <file>.
-    local cmd=$(echo ${cmd} | sed -e "s#{}#${_TARGET}#")	# replace second {} with <target>.
-    if "${_DRY}" ; then
+    if [ "${_F_DRY}" == "true" ] ; then
       echo ${cmd}
     else
-      echo "eval"
-      #eval "${cmd}"
+      echo "Executing command"
+      echo "${cmd}"
     fi
   done
 }
