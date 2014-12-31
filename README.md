@@ -8,10 +8,14 @@ Usage:
 
 Options:
 
-    select <file>           select a file.
-    unselect <pattern>      unselect file matching pattern.
-    list                    show selected files.
-    <pattern> exec <cmd>    operate on files matching pattern with custom command.
+    -s <file> || select <file>
+      select a file.
+    -u <pattern> || unselect <pattern>
+      unselect file matching pattern.
+    -l || list
+      show selected files.
+    <pattern> -e <command> || <pattern> exec <command>
+      operate on files matching pattern with custom command.
 
 Patterns:
 
@@ -26,20 +30,22 @@ Examples:
     :/tmp$ f select one two three four
 
     # Unselect the fourth file again.
-    :/tmp$ f -u four
+    :/tmp$ f unselect four
 
     # List selected files.
-    :/tmp$ f -l
+    :/tmp$ f list
         1   /tmp/one
         2   /tmp/two
         3   /tmp/three
 
     # Copy first and second file to another directory.
-    :/tmp$ f -g 1 2 -exec cp {} /some/other/path/ \;
+    #  You can use the index or filename for selection.
+    :/tmp$ f 1 two -exec cp {} /some/other/path/ \;
 
-    # Change and move file into current directory.
+    # Move a file into your current directory.
     :/tmp$ cd /another/path/
-    :/another/path/$ f -g 3 -exec mv {} ./ \;
+    :/another/path/$ f three -exec mv {} ./ \;
 
     # Unselect all selected files.
     :/another/path/$ f clear
+    :/another/path/$ f unselect all
