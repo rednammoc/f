@@ -123,7 +123,11 @@ f () {
   }
 
   print_selected_files_from_list () {
-    get_files_from_list $@ | sort -n | uniq
+    if result=$(get_files_from_list $@) ; then
+      printf -- '%s\n' "${result[@]}" | sort -n | uniq
+      return 0
+    fi
+    return 1
   }
 
   print_entry_by_index () {
@@ -181,12 +185,13 @@ f () {
   }
 
   f_unselect () {
-    shift 1; local selected_files=$(print_selected_files_from_list $@)
-    while read -r index file ; do
-      sed -e "${index}d" "${_F_LIST}" > "${_F_LIST}.tmp" &&
-      mv "${_F_LIST}.tmp"  "${_F_LIST}" &&
-      print_entry "${index}" "${file}"
-    done <<< "${selected_files}"
+    if selected_files=$(print_selected_files_from_list $@) ; then
+      while read -r index file ; do
+        sed -e "${index}d" "${_F_LIST}" > "${_F_LIST}.tmp" &&
+        mv "${_F_LIST}.tmp"  "${_F_LIST}" &&
+        print_entry "${index}" "${file}"
+      done <<< "${selected_files[@]}"
+    fi
   }
 
   # When no commands were specified print usage.
@@ -240,7 +245,9 @@ f () {
     else
       # Temporary store selected files.
       entry=$(print_selected_files_from_list $1)
-      if [ -z "${entry}" ] ; then return 1; fi
+      if [ -z "${entry}" ] ; then
+        return 1;
+      fi
       _SELECTED_FILES+=("${entry}") ;
       shift 1
     fi
@@ -256,13 +263,11 @@ f () {
 
   echo ${_SELECTED_FILES[@]} | while read line; do
     local file=$(echo ${line} | gawk -F " " '{print $2}')  # parse the filename.
-    local cmd=$(echo ${_CMD})
-    local cmd=$(echo ${cmd} | sed -e "s#{}#${file}#")	  	# replace first {} with <file>.
+    local cmd=$(echo ${_CMD} | sed -e "s#{}#${file}#")	  	# replace first {} with <file>.
     if [ "${_F_DRY}" == "true" ] ; then
       echo ${cmd}
     else
-      echo "Executing command"
-      echo "${cmd}"
+      eval ${cmd}
     fi
   done
 }
